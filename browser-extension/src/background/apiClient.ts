@@ -1,4 +1,6 @@
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001'
+import { API_BASE_URL } from '../utils/config'
+
+const BASE_URL = API_BASE_URL
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const result = await chrome.storage.local.get('clearcart_token')

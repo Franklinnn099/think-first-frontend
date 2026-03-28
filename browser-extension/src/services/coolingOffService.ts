@@ -1,4 +1,4 @@
-import type { CoolingOffItem } from '../types/index'
+import type { CoolingOffItem, RiskLevel } from '../types/index'
 import { API_BASE_URL } from '../utils/config'
 
 export interface BackendCoolingOffItem {
@@ -6,6 +6,7 @@ export interface BackendCoolingOffItem {
   productTitle: string
   productUrl: string
   riskScore: number
+  riskLevel?: RiskLevel
   triggerType?: string
   sourcePlatform: string
   delayHours: number
@@ -21,7 +22,7 @@ function toLocalItem(b: BackendCoolingOffItem, sessionId: string): CoolingOffIte
     pageTitle: b.productTitle,
     savedAt: new Date(b.createdAt).getTime(),
     riskScore: b.riskScore,
-    riskLevel: b.riskScore >= 61 ? 'high' : b.riskScore >= 31 ? 'medium' : 'low',
+    riskLevel: b.riskLevel ?? 'low',
     triggerType: b.triggerType,
     backendId: b.id,
     sessionId,

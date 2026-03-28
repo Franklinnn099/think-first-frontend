@@ -1,9 +1,9 @@
 import type {
   ImpulseAnalysis,
   ManipulationTactic,
+  RiskLevel,
   BackendAnalyzeResponse,
 } from '../types/index'
-import { scoreToLevel } from '../utils/riskCalculator'
 import { API_BASE_URL } from '../utils/config'
 
 /**
@@ -67,7 +67,7 @@ export async function analyzePageContext(
 
     return {
       riskScore: data.riskScore,
-      riskLevel: scoreToLevel(data.riskScore),
+      riskLevel: (data.riskLevel as RiskLevel) ?? 'low',
       tactics,
       emotionalTrigger: ai?.trigger_type,
       triggerExplanation: ai?.trigger_explanation,
