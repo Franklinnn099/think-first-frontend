@@ -17,8 +17,16 @@ export async function analyzePageContext(
   pageText: string,
   visitCount = 0,
 ): Promise<ImpulseAnalysis | null> {
+  if (!API_BASE_URL) {
+    console.error('[ThinkFirst] Cannot analyze — VITE_API_BASE_URL is not configured')
+    return null
+  }
+
   try {
-    const res = await fetch(`${API_BASE_URL}/api/analyze`, {
+    const endpoint = `${API_BASE_URL}/api/analyze`
+    console.log('[ThinkFirst] Sending analysis request to', endpoint)
+
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -36,10 +44,16 @@ export async function analyzePageContext(
       signal: AbortSignal.timeout(8000),
     })
 
-    if (!res.ok) throw new Error(`API error ${res.status}`)
+    if (!res.ok) {
+      console.error('[ThinkFirst] Backend returned', res.status, res.statusText)
+      return null
+    }
 
     const body: BackendAnalyzeResponse = await res.json()
-    if (!body.success) throw new Error('Backend returned success:false')
+    if (!body.success) {
+      console.error('[ThinkFirst] Backend returned success:false', body)
+      return null
+    }
 
     const { data } = body
     const ai = data.claudeAnalysis
@@ -65,9 +79,11 @@ export async function analyzePageContext(
 
     const firstRewrite = ai?.manipulation_tactics?.find(t => t.rewrite)?.rewrite
 
+    console.log('[ThinkFirst] Analysis complete — risk:', data.riskScore, 'tactics:', tactics.length)
+
     return {
       riskScore: data.riskScore,
-      riskLevel: (data.riskLevel as RiskLevel) ?? 'low',
+      riskLevel: (data.riskLevel?.toLowerCase() as RiskLevel) ?? 'low',
       tactics,
       emotionalTrigger: ai?.trigger_type,
       triggerExplanation: ai?.trigger_explanation,
@@ -77,7 +93,8 @@ export async function analyzePageContext(
       recommendation: ai?.recommendation,
       analyzedAt: Date.now(),
     }
-  } catch {
+  } catch (err) {
+    console.error('[ThinkFirst] Analysis failed:', err)
     return null
   }
 }

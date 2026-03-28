@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ThinkFirst — Analyze</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: #0f172a; color: #f8fafc; line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+    }
+
+    /* Nav */
+    .nav {
+      display: flex; align-items: center; justify-content: space-between;
+      max-width: 900px; margin: 0 auto; padding: 20px 24px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .nav-left { display: flex; align-items: center; gap: 10px; }
+    .nav-logo {
+      width: 32px; height: 32px; background: #4338ca; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 12px; color: white;
+    }
+    .nav-title { font-weight: 800; font-size: 16px; }
+    .nav-link { color: #64748b; font-size: 13px; font-weight: 500; text-decoration: none; }
+    .nav-link:hover { color: #94a3b8; }
+
+    /* Main */
+    .main { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
+
+    /* Input area */
+    .input-section { margin-bottom: 32px; }
+    .input-section h2 { font-size: 20px; font-weight: 800; margin-bottom: 6px; letter-spacing: -0.3px; }
+    .input-section p { font-size: 13px; color: #64748b; margin-bottom: 16px; }
+    .input-row { display: flex; gap: 10px; margin-bottom: 12px; }
+    .url-input {
+      flex: 1; padding: 12px 16px; background: #1e293b; border: 1px solid #334155;
+      border-radius: 10px; color: #f8fafc; font-size: 14px; font-family: inherit;
+      outline: none; transition: border-color 0.15s;
+    }
+    .url-input:focus { border-color: #4338ca; }
+    .url-input::placeholder { color: #475569; }
+    textarea.url-input { min-height: 120px; resize: vertical; }
+    .btn {
+      padding: 12px 24px; background: #4338ca; color: white; border: none;
+      border-radius: 10px; font-weight: 700; font-size: 14px; cursor: pointer;
+      font-family: inherit; transition: background 0.15s; white-space: nowrap;
+    }
+    .btn:hover { background: #3730a3; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-sm { padding: 8px 16px; font-size: 13px; border-radius: 8px; }
+    .btn-ghost {
+      background: transparent; border: 1px solid #334155; color: #94a3b8;
+    }
+    .btn-ghost:hover { border-color: #4338ca; color: #c7d2fe; }
+    .tabs { display: flex; gap: 0; margin-bottom: 16px; border-bottom: 1px solid #334155; }
+    .tab {
+      padding: 8px 18px; font-size: 13px; font-weight: 600; color: #64748b;
+      border-bottom: 2px solid transparent; cursor: pointer; transition: color 0.15s;
+      background: none; border-top: none; border-left: none; border-right: none;
+      font-family: inherit;
+    }
+    .tab.active { color: #818cf8; border-bottom-color: #818cf8; }
+
+    /* Status */
+    .status {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 16px; border-radius: 10px; font-size: 13px; font-weight: 500;
+      margin-bottom: 24px;
+    }
+    .status-info { background: rgba(67,56,202,0.15); border: 1px solid rgba(67,56,202,0.3); color: #a5b4fc; }
+    .status-error { background: rgba(220,38,38,0.15); border: 1px solid rgba(220,38,38,0.3); color: #fca5a5; }
+    .status-loading { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.2); color: #fbbf24; }
+    .spinner { width: 14px; height: 14px; border: 2px solid transparent; border-top-color: currentColor; border-radius: 50%; animation: spin 0.6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .hidden { display: none !important; }
+
+    /* Results */
+    .results { display: grid; gap: 20px; }
+    .card {
+      background: #1e293b; border: 1px solid #334155; border-radius: 16px;
+      padding: 24px; overflow: hidden;
+    }
+    .card-label {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; color: #64748b; margin-bottom: 12px;
+    }
+
+    /* Risk meter */
+    .risk-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+    .risk-score { font-size: 48px; font-weight: 900; letter-spacing: -2px; }
+    .risk-label { font-size: 14px; font-weight: 700; }
+    .risk-score.low, .risk-label.low { color: #10b981; }
+    .risk-score.medium, .risk-label.medium { color: #f59e0b; }
+    .risk-score.high, .risk-label.high { color: #ef4444; }
+    .risk-bar { height: 8px; background: #334155; border-radius: 99px; overflow: hidden; }
+    .risk-fill { height: 100%; border-radius: 99px; transition: width 0.6s ease; }
+    .risk-fill.low { background: #10b981; }
+    .risk-fill.medium { background: #f59e0b; }
+    .risk-fill.high { background: #ef4444; }
+
+    /* Tactics */
+    .tactic-list { display: flex; flex-direction: column; gap: 10px; }
+    .tactic-item {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 12px 14px; background: #0f172a; border-radius: 10px;
+    }
+    .tactic-badge {
+      padding: 3px 10px; border-radius: 99px; font-size: 11px; font-weight: 700;
+      white-space: nowrap; flex-shrink: 0;
+    }
+    .tactic-badge.urgency, .tactic-badge.loss_aversion { background: #fef2f2; color: #b91c1c; }
+    .tactic-badge.scarcity, .tactic-badge.fomo { background: #fff7ed; color: #c2410c; }
+    .tactic-badge.social_proof { background: #eff6ff; color: #1d4ed8; }
+    .tactic-badge.discount_anchoring, .tactic-badge.discount_pressure { background: #fffbeb; color: #b45309; }
+    .tactic-badge.countdown { background: #fdf2f8; color: #be185d; }
+    .tactic-badge.unknown { background: #f1f5f9; color: #475569; }
+    .tactic-phrase { font-size: 13px; color: #94a3b8; line-height: 1.5; }
+    .tactic-rewrite { font-size: 12px; color: #6366f1; margin-top: 4px; font-style: italic; }
+
+    /* AI section */
+    .ai-grid { display: grid; gap: 14px; }
+    .ai-item { padding: 14px; background: #0f172a; border-radius: 10px; }
+    .ai-item-label { font-size: 11px; font-weight: 700; color: #6366f1; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+    .ai-item-text { font-size: 13px; color: #cbd5e1; line-height: 1.6; }
+    .recommendation {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 700;
+    }
+    .recommendation.wait { background: rgba(245,158,11,0.15); color: #fbbf24; }
+    .recommendation.save { background: rgba(99,102,241,0.15); color: #a5b4fc; }
+    .recommendation.buy { background: rgba(16,185,129,0.15); color: #6ee7b7; }
+
+    /* Cooling off */
+    .cooloff-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px; background: #0f172a; border-radius: 10px; margin-bottom: 8px;
+    }
+    .cooloff-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .cooloff-dot.high { background: #ef4444; }
+    .cooloff-dot.medium { background: #f59e0b; }
+    .cooloff-dot.low { background: #10b981; }
+    .cooloff-info { flex: 1; min-width: 0; }
+    .cooloff-title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cooloff-meta { font-size: 11px; color: #64748b; }
+    .cooloff-empty { text-align: center; padding: 20px; color: #475569; font-size: 13px; }
+
+    @media (max-width: 600px) {
+      .input-row { flex-direction: column; }
+      .risk-score { font-size: 36px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="nav">
+    <div class="nav-left">
+      <div class="nav-logo">TF</div>
+      <span class="nav-title">ThinkFirst</span>
+    </div>
+    <a href="index.html" class="nav-link">Home</a>
+  </div>
+
+  <div class="main">
+    <div class="input-section">
+      <h2>Analyze a product page</h2>
+      <p>Paste the text from a shopping page to detect manipulation tactics and get a risk score.</p>
+
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('url')">URL</button>
+        <button class="tab" onclick="switchTab('text')">Paste Text</button>
+      </div>
+
+      <div id="tab-url">
+        <div class="input-row">
+          <input type="url" id="urlInput" class="url-input" placeholder="https://www.amazon.com/dp/..." />
+          <button class="btn" id="analyzeBtn" onclick="analyzeUrl()">Analyze</button>
+        </div>
+        <p style="font-size: 11px; color: #475569;">We'll fetch and analyze the page content for manipulation tactics.</p>
+      </div>
+
+      <div id="tab-text" class="hidden">
+        <textarea id="textInput" class="url-input" placeholder="Paste product page text here...&#10;&#10;Example: Limited time offer! Only 3 left in stock! Buy now before the price goes up! 50% OFF today only!"></textarea>
+        <div style="margin-top: 10px;">
+          <button class="btn" id="analyzeTextBtn" onclick="analyzeText()">Analyze Text</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status messages -->
+    <div id="statusBar" class="hidden"></div>
+
+    <!-- Results -->
+    <div id="results" class="results hidden">
+
+      <!-- Risk Score -->
+      <div class="card">
+        <div class="card-label">Impulse Risk Score</div>
+        <div class="risk-header">
+          <div class="risk-score" id="riskScore">0</div>
+          <div class="risk-label" id="riskLabel">Low Risk</div>
+        </div>
+        <div class="risk-bar">
+          <div class="risk-fill" id="riskFill" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <!-- Tactics detected -->
+      <div class="card" id="tacticsCard">
+        <div class="card-label">Manipulation Tactics Detected</div>
+        <div class="tactic-list" id="tacticsList"></div>
+      </div>
+
+      <!-- AI Analysis -->
+      <div class="card" id="aiCard" class="hidden">
+        <div class="card-label">AI Analysis</div>
+        <div class="ai-grid" id="aiGrid"></div>
+      </div>
+
+      <!-- Save to cooling off -->
+      <div class="card" id="saveCard">
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <button class="btn" onclick="saveToCoolingOff()">Save for Later (24h pause)</button>
+          <button class="btn btn-ghost" onclick="document.getElementById('results').classList.add('hidden')">Dismiss</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cooling-off list -->
+    <div class="card" style="margin-top: 32px;">
+      <div class="card-label">Cooling-Off List</div>
+      <div id="coolingOffList">
+        <div class="cooloff-empty">No items saved yet. Analyze a page and save items for a 24-hour pause.</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const API = (window.location.protocol === 'file:'
+  || window.location.hostname === 'localhost'
+  || window.location.hostname === '127.0.0.1')
+  ? 'http://localhost:3000'
+  : 'https://clearcart-ug-backend.onrender.com';
+
+let lastAnalysis = null;
+let lastUrl = '';
+let sessionId = localStorage.getItem('tf_session_id');
+if (!sessionId) {
+  sessionId = crypto.randomUUID();
+  localStorage.setItem('tf_session_id', sessionId);
+}
+
+// Tab switching
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.tab[onclick*="${tab}"]`).classList.add('active');
+  document.getElementById('tab-url').classList.toggle('hidden', tab !== 'url');
+  document.getElementById('tab-text').classList.toggle('hidden', tab !== 'text');
+}
+
+function showStatus(msg, type) {
+  const el = document.getElementById('statusBar');
+  el.className = `status status-${type}`;
+  el.innerHTML = type === 'loading' ? `<div class="spinner"></div>${msg}` : msg;
+  el.classList.remove('hidden');
+}
+function hideStatus() { document.getElementById('statusBar').classList.add('hidden'); }
+
+// Analyze by URL — fetch page text from the URL via a simple proxy or direct fetch
+async function analyzeUrl() {
+  const url = document.getElementById('urlInput').value.trim();
+  if (!url) return;
+  lastUrl = url;
+  showStatus('Fetching and analyzing page...', 'loading');
+  try {
+    // Try fetching the page text ourselves (may fail due to CORS)
+    let pageText = '';
+    try {
+      const res = await fetch(url, { mode: 'cors' });
+      const html = await res.text();
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      doc.querySelectorAll('script, style, nav, footer, noscript').forEach(el => el.remove());
+      pageText = (doc.body?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 3000);
+    } catch {
+      // CORS blocked — just send URL with placeholder text
+      pageText = `Product page at ${url}`;
+    }
+    await runAnalysis(pageText, url, url);
+  } catch (err) {
+    showStatus('Error: ' + err.message, 'error');
+  }
+}
+
+// Analyze pasted text
+async function analyzeText() {
+  const text = document.getElementById('textInput').value.trim();
+  if (!text) return;
+  lastUrl = '';
+  showStatus('Analyzing text...', 'loading');
+  try {
+    await runAnalysis(text, '', 'Pasted text');
+  } catch (err) {
+    showStatus('Error: ' + err.message, 'error');
+  }
+}
+
+async function runAnalysis(productText, url, pageContext) {
+  document.getElementById('analyzeBtn').disabled = true;
+  document.getElementById('analyzeTextBtn').disabled = true;
+
+  const res = await fetch(`${API}/api/analyze`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      productText,
+      url,
+      pageContext,
+      riskSignals: {
+        timeOfDay: new Date().getHours(),
+        revisitCount: 1,
+        cartValueJump: false,
+        discountPercent: 0,
+        stressLevel: 'low',
+      },
+    }),
+  });
+
+  const body = await res.json();
+  document.getElementById('analyzeBtn').disabled = false;
+  document.getElementById('analyzeTextBtn').disabled = false;
+
+  if (!body.success) {
+    showStatus('Backend error: ' + (body.error || 'Unknown'), 'error');
+    return;
+  }
+
+  lastAnalysis = body.data;
+  hideStatus();
+  renderResults(body.data);
+}
+
+function renderResults(data) {
+  const results = document.getElementById('results');
+  results.classList.remove('hidden');
+
+  // Risk score
+  const score = data.riskScore;
+  const level = score >= 61 ? 'high' : score >= 31 ? 'medium' : 'low';
+  const levelLabel = { low: 'Low Risk', medium: 'Medium Risk', high: 'High Risk' }[level];
+
+  const scoreEl = document.getElementById('riskScore');
+  scoreEl.textContent = score;
+  scoreEl.className = `risk-score ${level}`;
+
+  const labelEl = document.getElementById('riskLabel');
+  labelEl.textContent = levelLabel;
+  labelEl.className = `risk-label ${level}`;
+
+  const fillEl = document.getElementById('riskFill');
+  fillEl.style.width = `${score}%`;
+  fillEl.className = `risk-fill ${level}`;
+
+  // Tactics
+  const tacticsList = document.getElementById('tacticsList');
+  const allTactics = data.localTactics || [];
+  const aiTactics = data.claudeAnalysis?.manipulation_tactics || [];
+
+  if (allTactics.length === 0 && aiTactics.length === 0) {
+    tacticsList.innerHTML = '<div style="color: #64748b; font-size: 13px; padding: 8px;">No manipulation tactics detected on this page.</div>';
+  } else {
+    // Merge local + AI tactics
+    const merged = [];
+    for (const t of allTactics) {
+      const ai = aiTactics.find(a => a.type === t.type);
+      merged.push({
+        type: t.type,
+        phrase: ai?.phrase || t.matchedPhrase,
+        rewrite: ai?.rewrite || null,
+      });
+    }
+    for (const a of aiTactics) {
+      if (!merged.find(m => m.type === a.type)) {
+        merged.push({ type: a.type, phrase: a.phrase, rewrite: a.rewrite });
+      }
+    }
+
+    tacticsList.innerHTML = merged.map(t => `
+      <div class="tactic-item">
+        <span class="tactic-badge ${t.type}">${t.type.replace(/_/g, ' ')}</span>
+        <div>
+          <div class="tactic-phrase">"${escHtml(t.phrase)}"</div>
+          ${t.rewrite ? `<div class="tactic-rewrite">Honest version: ${escHtml(t.rewrite)}</div>` : ''}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // AI analysis
+  const ai = data.claudeAnalysis;
+  const aiCard = document.getElementById('aiCard');
+  const aiGrid = document.getElementById('aiGrid');
+
+  if (ai && !ai.parseError) {
+    aiCard.classList.remove('hidden');
+    let html = '';
+
+    if (ai.trigger_type) {
+      html += `<div class="ai-item">
+        <div class="ai-item-label">Emotional Trigger</div>
+        <div class="ai-item-text"><strong>${escHtml(ai.trigger_type.replace(/_/g, ' '))}</strong>${ai.trigger_explanation ? ` — ${escHtml(ai.trigger_explanation)}` : ''}</div>
+      </div>`;
+    }
+
+    if (ai.reflection_prompt) {
+      html += `<div class="ai-item" style="border-left: 3px solid #6366f1;">
+        <div class="ai-item-label">Reflection Prompt</div>
+        <div class="ai-item-text">${escHtml(ai.reflection_prompt)}</div>
+      </div>`;
+    }
+
+    if (ai.regret_forecast) {
+      html += `<div class="ai-item">
+        <div class="ai-item-label">Regret Forecast</div>
+        <div class="ai-item-text">${escHtml(ai.regret_forecast)}</div>
+      </div>`;
+    }
+
+    if (ai.recommendation) {
+      html += `<div class="ai-item">
+        <div class="ai-item-label">Recommendation</div>
+        <div class="recommendation ${ai.recommendation}">${ai.recommendation.toUpperCase()}</div>
+      </div>`;
+    }
+
+    aiGrid.innerHTML = html;
+  } else {
+    aiCard.classList.add('hidden');
+  }
+}
+
+async function saveToCoolingOff() {
+  if (!lastAnalysis) return;
+  const ai = lastAnalysis.claudeAnalysis;
+  try {
+    const res = await fetch(`${API}/api/coolingoff`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId,
+        productTitle: lastUrl || 'Analyzed text',
+        productUrl: lastUrl || null,
+        riskScore: lastAnalysis.riskScore,
+        triggerType: ai?.trigger_type || null,
+        claudeAnalysis: ai && !ai.parseError ? {
+          reflection_prompt: ai.reflection_prompt,
+          regret_forecast: ai.regret_forecast,
+          recommendation: ai.recommendation,
+        } : null,
+        sourcePlatform: 'extension',
+        delayHours: 24,
+      }),
+    });
+    const body = await res.json();
+    if (body.success) {
+      showStatus('Saved to cooling-off list! You will be reminded in 24 hours.', 'info');
+      loadCoolingOffList();
+    }
+  } catch (err) {
+    showStatus('Failed to save: ' + err.message, 'error');
+  }
+}
+
+async function loadCoolingOffList() {
+  try {
+    const res = await fetch(`${API}/api/coolingoff/${encodeURIComponent(sessionId)}`);
+    const body = await res.json();
+    const list = document.getElementById('coolingOffList');
+    if (body.success && body.data?.length > 0) {
+      list.innerHTML = body.data.map(item => {
+        const score = item.risk_score || 0;
+        const level = score >= 61 ? 'high' : score >= 31 ? 'medium' : 'low';
+        const date = new Date(item.created_at).toLocaleDateString();
+        return `<div class="cooloff-item">
+          <div class="cooloff-dot ${level}"></div>
+          <div class="cooloff-info">
+            <div class="cooloff-title">${escHtml(item.product_title)}</div>
+            <div class="cooloff-meta">Score: ${score} &middot; ${date}</div>
+          </div>
+        </div>`;
+      }).join('');
+    } else {
+      list.innerHTML = '<div class="cooloff-empty">No items saved yet.</div>';
+    }
+  } catch {}
+}
+
+function escHtml(s) {
+  if (!s) return '';
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// Load cooling-off list on page load
+loadCoolingOffList();
+</script>
+</body>
+</html>

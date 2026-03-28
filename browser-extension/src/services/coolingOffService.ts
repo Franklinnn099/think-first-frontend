@@ -1,31 +1,33 @@
-import type { CoolingOffItem, RiskLevel } from '../types/index'
+import type { CoolingOffItem } from '../types/index'
 import { API_BASE_URL } from '../utils/config'
 
+// Backend returns snake_case fields directly from Supabase
 export interface BackendCoolingOffItem {
   id: string
-  productTitle: string
-  productUrl: string
-  riskScore: number
-  riskLevel?: RiskLevel
-  triggerType?: string
-  sourcePlatform: string
-  delayHours: number
-  createdAt: string
-  resolvedAt?: string
-  action?: 'keep' | 'remove' | 'extend'
+  product_title: string
+  product_url: string
+  risk_score: number
+  trigger_type?: string
+  source_platform: string
+  cooloff_expires_at: string
+  created_at: string
+  resolved?: boolean
+  resolved_action?: string
+  session_id: string
 }
 
-function toLocalItem(b: BackendCoolingOffItem, sessionId: string): CoolingOffItem {
+function toLocalItem(b: BackendCoolingOffItem): CoolingOffItem {
+  const score = b.risk_score ?? 0
   return {
     id: b.id,
-    url: b.productUrl,
-    pageTitle: b.productTitle,
-    savedAt: new Date(b.createdAt).getTime(),
-    riskScore: b.riskScore,
-    riskLevel: b.riskLevel ?? 'low',
-    triggerType: b.triggerType,
+    url: b.product_url,
+    pageTitle: b.product_title,
+    savedAt: new Date(b.created_at).getTime(),
+    riskScore: score,
+    riskLevel: score >= 61 ? 'high' : score >= 31 ? 'medium' : 'low',
+    triggerType: b.trigger_type,
     backendId: b.id,
-    sessionId,
+    sessionId: b.session_id,
   }
 }
 
@@ -80,7 +82,7 @@ export async function fetchBackendCoolingOffList(
     if (!res.ok) return null
     const body = await res.json()
     if (!body.success || !Array.isArray(body.data)) return null
-    return (body.data as BackendCoolingOffItem[]).map(item => toLocalItem(item, sessionId))
+    return (body.data as BackendCoolingOffItem[]).map(item => toLocalItem(item))
   } catch {
     return null
   }

@@ -1,6 +1,3 @@
-import { getSettings, incrementVisitCount } from '../utils/storage'
-import type { ImpulseAnalysis } from '../types/index'
-
 /** Collect visible page text, skipping scripts/styles/nav. Max 3000 chars. */
 function extractPageText(): string {
   const texts: string[] = []
@@ -25,13 +22,35 @@ function extractPageText(): string {
 }
 
 async function init(): Promise<void> {
-  const settings = await getSettings()
-  if (!settings.enabled) return
+  console.log('[ThinkFirst] Content script running on', window.location.href)
 
-  const visitCount = await incrementVisitCount(window.location.href)
+  // Read settings directly from chrome.storage.local
+  const { tf_settings: settings } = await chrome.storage.local.get('tf_settings')
+  const merged = { enabled: true, riskThreshold: 20, showBadge: true, ...settings }
+
+  if (!merged.enabled) {
+    console.log('[ThinkFirst] Extension disabled')
+    return
+  }
+
+  // Track visit count
+  const { tf_visit_counts: counts = {} } = await chrome.storage.local.get('tf_visit_counts')
+  const urlKey = (() => {
+    try {
+      const u = new URL(window.location.href)
+      return (u.hostname + u.pathname).toLowerCase().replace(/\/$/, '')
+    } catch {
+      return window.location.href.toLowerCase()
+    }
+  })()
+  counts[urlKey] = (counts[urlKey] ?? 0) + 1
+  await chrome.storage.local.set({ tf_visit_counts: counts })
+  const visitCount = counts[urlKey]
+
   const pageText = extractPageText()
+  console.log('[ThinkFirst] Extracted', pageText.length, 'chars, sending ANALYZE_PAGE...')
 
-  // Send page content to background — backend handles all detection
+  // Send to background for backend analysis
   const response = await chrome.runtime.sendMessage({
     type: 'ANALYZE_PAGE',
     payload: {
@@ -42,15 +61,27 @@ async function init(): Promise<void> {
     },
   })
 
-  if (!response?.success || !response?.data) return
+  console.log('[ThinkFirst] Got response:', response?.success, response?.data ? `score=${response.data.riskScore}` : 'no data')
 
-  const analysis: ImpulseAnalysis = response.data
+  if (!response?.success) {
+    console.warn('[ThinkFirst] Analysis failed:', response?.error ?? 'no response')
+    return
+  }
+  if (!response?.data) {
+    console.warn('[ThinkFirst] No analysis data — backend may be down')
+    return
+  }
 
-  if (analysis.riskScore < settings.riskThreshold) return
+  const analysis = response.data
 
-  console.log('[ThinkFirst] risk score:', analysis.riskScore, '| tactics:', analysis.tactics.map(t => t.type))
+  if (analysis.riskScore < merged.riskThreshold) {
+    console.log('[ThinkFirst] Score', analysis.riskScore, 'below threshold', merged.riskThreshold)
+    return
+  }
 
-  injectRiskBadge(analysis.riskScore, analysis.tactics.length)
+  console.log('[ThinkFirst] Risk:', analysis.riskScore, '| Tactics:', analysis.tactics?.length)
+
+  injectRiskBadge(analysis.riskScore, analysis.tactics?.length ?? 0)
 
   if (analysis.riskScore >= 61) {
     chrome.runtime.sendMessage({

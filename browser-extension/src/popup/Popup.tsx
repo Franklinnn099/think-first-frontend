@@ -130,15 +130,23 @@ export default function Popup() {
   const [dismissed, setDismissed] = useState(false)
   const [currentTab, setCurrentTab] = useState<chrome.tabs.Tab | null>(null)
 
+  const [debugInfo, setDebugInfo] = useState<string>('')
+
   useEffect(() => {
     async function load() {
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true })
-      setCurrentTab(tabs[0] ?? null)
+      const tab = tabs[0] ?? null
+      setCurrentTab(tab)
 
       const [analysisRes, listRes] = await Promise.all([
         sendToBackground<TabAnalysis | null>({ type: 'GET_CURRENT_TAB_ANALYSIS' }),
         sendToBackground<CoolingOffItem[]>({ type: 'GET_COOLING_OFF_LIST' }),
       ])
+
+      // Debug: show what we got back
+      const info = `Tab: ${tab?.id} | Analysis: ${analysisRes.success ? (analysisRes.data ? `score=${analysisRes.data.impulseAnalysis?.riskScore}` : 'null') : `err: ${analysisRes.error}`}`
+      setDebugInfo(info)
+      console.log('[ThinkFirst Popup]', info, analysisRes)
 
       if (analysisRes.success) setTabAnalysis(analysisRes.data ?? null)
       if (listRes.success) setCoolingOffList(listRes.data ?? [])
@@ -179,7 +187,7 @@ export default function Popup() {
 
   const riskScore = tabAnalysis?.impulseAnalysis.riskScore ?? 0
   const isHighRisk = !dismissed && riskScore >= 61
-  const isMediumRisk = !dismissed && riskScore >= 20 && riskScore < 60
+  const isMediumRisk = !dismissed && riskScore >= 20 && riskScore <= 60
 
   return (
     <div className="w-[380px] bg-white flex flex-col min-h-[220px]">
@@ -201,6 +209,13 @@ export default function Popup() {
           <SettingsIcon size={16} />
         </a>
       </header>
+
+      {/* Debug bar — remove after testing */}
+      {debugInfo && (
+        <div className="px-3 py-1.5 bg-gray-100 text-[10px] font-mono text-gray-500 border-b">
+          {debugInfo}
+        </div>
+      )}
 
       {/* ── Body ── */}
       <main className="flex-1">

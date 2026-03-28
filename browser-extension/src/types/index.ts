@@ -7,6 +7,8 @@ export type TacticType =
   | 'fomo'
   | 'countdown'
   | 'discount_pressure'
+  | 'loss_aversion'
+  | 'discount_anchoring'
   | 'unknown'
 
 export type RiskLevel = 'low' | 'medium' | 'high'

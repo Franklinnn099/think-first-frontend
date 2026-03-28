@@ -9,8 +9,12 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  if (!BASE_URL) {
+    throw new Error('VITE_API_BASE_URL is not configured in .env')
+  }
   const authHeaders = await getAuthHeaders()
-  const response = await fetch(`${BASE_URL}${path}`, {
+  const url = `${BASE_URL}${path}`
+  const response = await fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -20,7 +24,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   })
 
   if (!response.ok) {
-    throw new Error(`API error ${response.status}: ${response.statusText}`)
+    throw new Error(`API error ${response.status}: ${response.statusText} (${url})`)
   }
 
   return response.json() as Promise<T>
