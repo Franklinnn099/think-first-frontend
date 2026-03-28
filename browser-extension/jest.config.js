@@ -11,6 +11,8 @@ module.exports = {
     'ts-jest': {
       tsconfig: {
         jsx: 'react-jsx',
+        module: 'esnext',
+        moduleResolution: 'bundler',
       },
     },
   },

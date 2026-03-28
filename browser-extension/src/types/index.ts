@@ -104,9 +104,8 @@ export interface TabAnalysis {
 
 // Message types for chrome runtime messaging
 export type MessageType =
-  | 'TACTICS_DETECTED'
+  | 'ANALYZE_PAGE'
   | 'SHOW_INTERVENTION'
-  | 'GET_PAGE_ANALYSIS'
   | 'GET_CURRENT_TAB_ANALYSIS'
   | 'SAVE_TO_COOLING_OFF'
   | 'GET_COOLING_OFF_LIST'

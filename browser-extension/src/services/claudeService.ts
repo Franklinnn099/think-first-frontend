@@ -4,51 +4,33 @@ import type {
   BackendAnalyzeResponse,
 } from '../types/index'
 import { scoreToLevel } from '../utils/riskCalculator'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'https://clearcart-ug-backend.onrender.com'
-
-/**
- * Extracts a discount percentage from detected tactic copy text.
- * Looks for patterns like "save 40%" or "40% off".
- */
-function extractDiscountPercent(tactics: ManipulationTactic[]): number {
-  for (const t of tactics) {
-    if (t.type === 'discount_pressure') {
-      const match = t.copy.match(/(\d+)\s*%/)
-      if (match) return parseInt(match[1], 10)
-    }
-  }
-  return 0
-}
+import { API_BASE_URL } from '../utils/config'
 
 /**
- * Calls the backend to enrich local detection with Claude AI analysis.
- * Returns null on network failure — local detection result is still shown.
+ * Sends raw page text to the backend for full detection + AI analysis.
+ * The backend handles ALL tactic detection — no local regex used.
+ * Returns null if the backend is unreachable.
  */
 export async function analyzePageContext(
   url: string,
   pageTitle: string,
-  tactics: ManipulationTactic[],
-  riskScore: number,
+  pageText: string,
   visitCount = 0,
 ): Promise<ImpulseAnalysis | null> {
-  // productText: join tactic copy snippets as a representative page excerpt
-  const productText = tactics.map(t => t.copy).join(' | ') || pageTitle
-
   try {
-    const res = await fetch(`${API_BASE}/api/analyze`, {
+    const res = await fetch(`${API_BASE_URL}/api/analyze`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        productText,
+        productText: pageText,
         url,
         pageContext: pageTitle,
         riskSignals: {
           timeOfDay: new Date().getHours(),
           revisitCount: visitCount,
           cartValueJump: false,
-          discountPercent: extractDiscountPercent(tactics),
-          stressLevel: 'low', // default; could be set via user check-in UI
+          discountPercent: 0,
+          stressLevel: 'low',
         },
       }),
       signal: AbortSignal.timeout(8000),
@@ -62,26 +44,31 @@ export async function analyzePageContext(
     const { data } = body
     const ai = data.claudeAnalysis
 
-    // Backend risk score takes precedence when available
-    const finalScore = data.riskScore ?? riskScore
+    // Map backend localTactics to ManipulationTactic[]
+    const tactics: ManipulationTactic[] = (data.localTactics ?? []).map(lt => ({
+      type: (lt.type as ManipulationTactic['type']) ?? 'unknown',
+      copy: lt.matchedPhrase,
+      severity: 2,
+    }))
 
-    // Map backend manipulation_tactics back to our ManipulationTactic[] format,
-    // merging with locally-detected tactics (local takes precedence for type/severity).
-    const mergedTactics: ManipulationTactic[] = tactics.length > 0
-      ? tactics
-      : (data.localTactics ?? []).map(lt => ({
-          type: lt.type as ManipulationTactic['type'],
-          copy: lt.matchedPhrase,
-          severity: 2,
-        }))
+    // Merge AI manipulation_tactics for richer copy/rewrites
+    if (ai?.manipulation_tactics?.length) {
+      ai.manipulation_tactics.forEach(at => {
+        const existing = tactics.find(t => t.type === at.type)
+        if (existing) {
+          existing.copy = at.phrase || existing.copy
+        } else {
+          tactics.push({ type: at.type as ManipulationTactic['type'], copy: at.phrase, severity: 2 })
+        }
+      })
+    }
 
-    // Extract the truth rewrite from the first AI tactic that has one
     const firstRewrite = ai?.manipulation_tactics?.find(t => t.rewrite)?.rewrite
 
     return {
-      riskScore: finalScore,
-      riskLevel: scoreToLevel(finalScore),
-      tactics: mergedTactics,
+      riskScore: data.riskScore,
+      riskLevel: scoreToLevel(data.riskScore),
+      tactics,
       emotionalTrigger: ai?.trigger_type,
       triggerExplanation: ai?.trigger_explanation,
       truthRewrite: firstRewrite,
@@ -91,12 +78,6 @@ export async function analyzePageContext(
       analyzedAt: Date.now(),
     }
   } catch {
-    // Graceful offline fallback — UI still works with local detection
-    return {
-      riskScore,
-      riskLevel: scoreToLevel(riskScore),
-      tactics,
-      analyzedAt: Date.now(),
-    }
+    return null
   }
 }

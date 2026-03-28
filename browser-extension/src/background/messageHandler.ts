@@ -12,20 +12,14 @@ import {
   fetchBackendCoolingOffList,
   resolveBackendItem,
 } from '../services/coolingOffService'
-import { computeRiskScore, scoreToLevel } from '../utils/riskCalculator'
 import type {
   MessageRequest,
   MessageResponse,
-  ManipulationTactic,
-  ImpulseAnalysis,
   CoolingOffItem,
   ExtensionSettings,
   TabAnalysis,
 } from '../types/index'
 
-// Per-tab analysis lives here in memory.
-// MV3 service workers may be killed; this is intentionally ephemeral —
-// the content script re-detects on each page visit.
 const tabAnalysisMap = new Map<number, TabAnalysis>()
 
 type SendResponse = (response: MessageResponse) => void
@@ -37,52 +31,30 @@ export async function handleMessage(
 ): Promise<void> {
   try {
     switch (message.type) {
-      // ── Content script sends local detection results ──────────────────────
-      case 'TACTICS_DETECTED': {
-        const payload = message.payload as {
-          tactics: ManipulationTactic[]
-          riskScore: number
+      // ── Content script sends page text → backend handles all detection ────
+      case 'ANALYZE_PAGE': {
+        const { url, pageTitle, pageText, visitCount } = message.payload as {
           url: string
           pageTitle: string
+          pageText: string
           visitCount: number
         }
-        const impulseAnalysis: ImpulseAnalysis = {
-          riskScore: payload.riskScore,
-          riskLevel: scoreToLevel(payload.riskScore),
-          tactics: payload.tactics,
-          analyzedAt: Date.now(),
-        }
-        const tabId = sender.tab?.id
-        if (tabId !== undefined) {
-          tabAnalysisMap.set(tabId, {
-            url: payload.url,
-            pageTitle: payload.pageTitle,
-            impulseAnalysis,
-          })
-          // High-risk pages: enrich with AI asynchronously (fire-and-forget)
-          if (payload.riskScore >= 61) {
-            analyzePageContext(
-              payload.url,
-              payload.pageTitle,
-              payload.tactics,
-              payload.riskScore,
-              payload.visitCount,
-            )
-              .then(ai => {
-                if (ai) {
-                  const entry = tabAnalysisMap.get(tabId)
-                  if (entry) tabAnalysisMap.set(tabId, { ...entry, impulseAnalysis: ai })
-                }
-              })
-              .catch(() => {})
+
+        const analysis = await analyzePageContext(url, pageTitle, pageText, visitCount)
+
+        if (analysis) {
+          const tabId = sender.tab?.id
+          if (tabId !== undefined) {
+            tabAnalysisMap.set(tabId, { url, pageTitle, impulseAnalysis: analysis })
           }
+          await updateBadge(analysis.riskScore)
         }
-        await updateBadge(payload.riskScore)
-        sendResponse({ success: true })
+
+        sendResponse({ success: true, data: analysis })
         break
       }
 
-      // ── Content script signals high-risk page for badge flash ────────────
+      // ── High-risk badge flash ─────────────────────────────────────────────
       case 'SHOW_INTERVENTION': {
         await chrome.action.setBadgeText({ text: '!' })
         await chrome.action.setBadgeBackgroundColor({ color: '#DC2626' })
@@ -99,28 +71,12 @@ export async function handleMessage(
         break
       }
 
-      // ── Popup manually requests AI enrichment ────────────────────────────
-      case 'GET_PAGE_ANALYSIS': {
-        const { url, tactics } = message.payload as {
-          url: string
-          pageText: string
-          tactics: ManipulationTactic[]
-        }
-        const riskScore = computeRiskScore(tactics)
-        const analysis = await analyzePageContext(url, url, tactics, riskScore)
-        sendResponse({ success: true, data: analysis })
-        break
-      }
-
       // ── Cooling-off list: try backend first, fall back to local ───────────
       case 'GET_COOLING_OFF_LIST': {
         const sessionId = await getOrCreateSessionId()
         const backendList = await fetchBackendCoolingOffList(sessionId)
         if (backendList !== null) {
-          // Sync backend result to local storage
-          for (const item of backendList) {
-            await addToCoolingOff(item)
-          }
+          for (const item of backendList) await addToCoolingOff(item)
           sendResponse({ success: true, data: backendList })
         } else {
           const list = await getCoolingOffList()
@@ -134,13 +90,10 @@ export async function handleMessage(
         const sessionId = await getOrCreateSessionId()
         const settings = await getSettings()
 
-        // Get the current tab's analysis for richer data to send to backend
         const tabs = await chrome.tabs.query({ active: true, currentWindow: true })
         const tabId = tabs[0]?.id
-        const tabAnalysis = tabId !== undefined ? tabAnalysisMap.get(tabId) : undefined
-        const ai = tabAnalysis?.impulseAnalysis
+        const ai = tabId !== undefined ? tabAnalysisMap.get(tabId)?.impulseAnalysis : undefined
 
-        // Save to backend (fire-and-forget on failure)
         const backendId = await saveToBackendCoolingOff({
           sessionId,
           pageTitle: payload.pageTitle,
@@ -172,14 +125,12 @@ export async function handleMessage(
 
       case 'REMOVE_FROM_COOLING_OFF': {
         const { id } = message.payload as { id: string }
-        // Resolve on backend as 'remove' (non-blocking)
         resolveBackendItem(id, 'remove').catch(() => {})
         const list = await removeFromCoolingOff(id)
         sendResponse({ success: true, data: list })
         break
       }
 
-      // ── Settings ──────────────────────────────────────────────────────────
       case 'GET_SETTINGS': {
         const settings = await getSettings()
         sendResponse({ success: true, data: settings })
@@ -218,9 +169,9 @@ async function updateBadge(riskScore: number): Promise<void> {
   }
   if (riskScore >= 61) {
     await chrome.action.setBadgeText({ text: '!' })
-    await chrome.action.setBadgeBackgroundColor({ color: '#DC2626' }) // red
+    await chrome.action.setBadgeBackgroundColor({ color: '#DC2626' })
   } else {
     await chrome.action.setBadgeText({ text: String(riskScore) })
-    await chrome.action.setBadgeBackgroundColor({ color: '#F59E0B' }) // amber
+    await chrome.action.setBadgeBackgroundColor({ color: '#F59E0B' })
   }
 }

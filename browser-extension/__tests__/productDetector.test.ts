@@ -1,87 +1,130 @@
 /**
- * Tests for content/detector.ts — ThinkFirst manipulation tactic detector.
- * Renamed from productDetector.test.ts.
+ * Tests for claudeService.ts — backend-only analysis integration.
+ * Local regex detection has been removed; the backend handles all detection.
  */
-import { detectManipulationTactics } from '../src/content/detector'
 
-// Minimal NodeFilter stub for jsdom
-if (!global.NodeFilter) {
-  // @ts-expect-error jsdom may expose this differently
-  global.NodeFilter = { SHOW_TEXT: 0x4, FILTER_ACCEPT: 1, FILTER_SKIP: 3, FILTER_REJECT: 2 }
+// Mock config before importing claudeService
+jest.mock('../src/utils/config', () => ({
+  API_BASE_URL: 'https://test-backend.example.com',
+}))
+
+jest.mock('../src/utils/riskCalculator', () => ({
+  scoreToLevel: (score: number) => (score >= 61 ? 'high' : score >= 31 ? 'medium' : 'low'),
+}))
+
+import { analyzePageContext } from '../src/services/claudeService'
+
+// Mock fetch globally
+global.fetch = jest.fn()
+const mockFetch = global.fetch as jest.Mock
+
+const BACKEND_RESPONSE = {
+  success: true,
+  data: {
+    localTactics: [
+      { type: 'urgency', matchedPhrase: 'Limited time offer' },
+      { type: 'scarcity', matchedPhrase: 'Only 2 left' },
+    ],
+    riskScore: 72,
+    riskLevel: 'High',
+    claudeAnalysis: {
+      manipulation_tactics: [
+        { type: 'urgency', phrase: 'Limited time offer', rewrite: 'This item is always available' },
+      ],
+      trigger_type: 'fomo',
+      trigger_explanation: 'Artificial urgency to prevent comparison shopping',
+      risk_level: 'High',
+      regret_forecast: 'High likelihood of regret without reflection',
+      reflection_prompt: 'Would you still want this without the countdown?',
+      recommendation: 'wait',
+    },
+  },
 }
 
-describe('detectManipulationTactics', () => {
-  beforeEach(() => {
-    document.body.innerHTML = ''
+beforeEach(() => {
+  mockFetch.mockReset()
+})
+
+describe('analyzePageContext', () => {
+  it('calls backend with productText, url, pageContext and riskSignals', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => BACKEND_RESPONSE,
+    })
+
+    await analyzePageContext('https://shop.example.com/item', 'Great Widget', 'Only 2 left! Limited time offer', 1)
+
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    const [url, options] = mockFetch.mock.calls[0]
+    expect(url).toBe('https://test-backend.example.com/api/analyze')
+    const body = JSON.parse(options.body)
+    expect(body.productText).toBe('Only 2 left! Limited time offer')
+    expect(body.url).toBe('https://shop.example.com/item')
+    expect(body.pageContext).toBe('Great Widget')
+    expect(body.riskSignals).toHaveProperty('revisitCount', 1)
+    expect(body.riskSignals).toHaveProperty('timeOfDay')
   })
 
-  it('returns empty array on a clean page', () => {
-    document.body.innerHTML = '<h1>Welcome to our store</h1><p>Great products at great prices.</p>'
-    expect(detectManipulationTactics()).toHaveLength(0)
+  it('maps backend localTactics to ManipulationTactic[]', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => BACKEND_RESPONSE })
+
+    const result = await analyzePageContext('https://example.com', 'Widget', 'Only 2 left', 0)
+
+    expect(result).not.toBeNull()
+    expect(result!.tactics.length).toBeGreaterThan(0)
+    expect(result!.tactics.some(t => t.type === 'urgency')).toBe(true)
+    expect(result!.tactics.some(t => t.type === 'scarcity')).toBe(true)
   })
 
-  it('detects urgency — "limited time offer"', () => {
-    document.body.innerHTML = '<p>Limited time offer — save big today!</p>'
-    const tactics = detectManipulationTactics()
-    expect(tactics.some(t => t.type === 'urgency')).toBe(true)
+  it('uses backend riskScore directly', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => BACKEND_RESPONSE })
+
+    const result = await analyzePageContext('https://example.com', 'Widget', 'text', 0)
+
+    expect(result!.riskScore).toBe(72)
   })
 
-  it('detects scarcity — "only 2 left"', () => {
-    document.body.innerHTML = '<span>Only 2 left in stock</span>'
-    const tactics = detectManipulationTactics()
-    expect(tactics.some(t => t.type === 'scarcity')).toBe(true)
+  it('maps claudeAnalysis fields to ImpulseAnalysis', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => BACKEND_RESPONSE })
+
+    const result = await analyzePageContext('https://example.com', 'Widget', 'text', 0)
+
+    expect(result!.reflectionPrompt).toBe('Would you still want this without the countdown?')
+    expect(result!.emotionalTrigger).toBe('fomo')
+    expect(result!.recommendation).toBe('wait')
+    expect(result!.truthRewrite).toBe('This item is always available')
   })
 
-  it('detects social_proof — "X people viewing"', () => {
-    document.body.innerHTML = '<div>47 people are viewing this item right now</div>'
-    const tactics = detectManipulationTactics()
-    expect(tactics.some(t => t.type === 'social_proof')).toBe(true)
+  it('returns null when backend is unreachable', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('Network error'))
+
+    const result = await analyzePageContext('https://example.com', 'Widget', 'text', 0)
+
+    expect(result).toBeNull()
   })
 
-  it('detects fomo — "today only"', () => {
-    document.body.innerHTML = '<strong>Today only — 40% off!</strong>'
-    const tactics = detectManipulationTactics()
-    expect(tactics.some(t => t.type === 'fomo')).toBe(true)
+  it('returns null on non-ok HTTP response', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 500 })
+
+    const result = await analyzePageContext('https://example.com', 'Widget', 'text', 0)
+
+    expect(result).toBeNull()
   })
 
-  it('detects discount_pressure — "was $X"', () => {
-    document.body.innerHTML = '<p>Was $199.99 — now just $99!</p>'
-    const tactics = detectManipulationTactics()
-    expect(tactics.some(t => t.type === 'discount_pressure')).toBe(true)
-  })
+  it('handles null claudeAnalysis gracefully (no tactics detected)', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        success: true,
+        data: { localTactics: [], riskScore: 5, riskLevel: 'Low', claudeAnalysis: null },
+      }),
+    })
 
-  it('returns at most one tactic entry per type', () => {
-    document.body.innerHTML = `
-      <p>Only 1 left! Hurry, limited time offer!</p>
-      <p>Only 2 items remaining, selling fast!</p>
-    `
-    const tactics = detectManipulationTactics()
-    const types = tactics.map(t => t.type)
-    const unique = new Set(types)
-    expect(types.length).toBe(unique.size)
-  })
+    const result = await analyzePageContext('https://example.com', 'Widget', 'normal page', 0)
 
-  it('includes the matching copy text', () => {
-    document.body.innerHTML = '<p>Flash sale — today only, 50% off!</p>'
-    const tactics = detectManipulationTactics()
-    const fomo = tactics.find(t => t.type === 'fomo')
-    expect(fomo?.copy).toBeTruthy()
-    expect(typeof fomo?.copy).toBe('string')
-  })
-
-  it('assigns high severity (3) to urgency and scarcity', () => {
-    document.body.innerHTML = '<p>Only 1 left! Offer ends in 2 hours!</p>'
-    const tactics = detectManipulationTactics()
-    const highSeverity = tactics.filter(t => t.severity === 3)
-    expect(highSeverity.length).toBeGreaterThan(0)
-  })
-
-  it('ignores script and style content', () => {
-    document.body.innerHTML = `
-      <script>var x = "only 1 left";</script>
-      <style>.urgency { content: "limited time"; }</style>
-      <p>Normal product description.</p>
-    `
-    expect(detectManipulationTactics()).toHaveLength(0)
+    expect(result).not.toBeNull()
+    expect(result!.riskScore).toBe(5)
+    expect(result!.tactics).toHaveLength(0)
+    expect(result!.reflectionPrompt).toBeUndefined()
   })
 })

@@ -1,6 +1,5 @@
 import type { CoolingOffItem } from '../types/index'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'https://clearcart-ug-backend.onrender.com'
+import { API_BASE_URL } from '../utils/config'
 
 export interface BackendCoolingOffItem {
   id: string
@@ -43,7 +42,7 @@ export async function saveToBackendCoolingOff(params: {
   coolingOffDuration?: number
 }): Promise<string | null> {
   try {
-    const res = await fetch(`${API_BASE}/api/coolingoff`, {
+    const res = await fetch(`${API_BASE_URL}/api/coolingoff`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -74,7 +73,7 @@ export async function fetchBackendCoolingOffList(
   sessionId: string,
 ): Promise<CoolingOffItem[] | null> {
   try {
-    const res = await fetch(`${API_BASE}/api/coolingoff/${encodeURIComponent(sessionId)}`, {
+    const res = await fetch(`${API_BASE_URL}/api/coolingoff/${encodeURIComponent(sessionId)}`, {
       signal: AbortSignal.timeout(6000),
     })
     if (!res.ok) return null
@@ -94,7 +93,7 @@ export async function resolveBackendItem(
   action: 'keep' | 'remove' | 'extend',
 ): Promise<boolean> {
   try {
-    const res = await fetch(`${API_BASE}/api/coolingoff/${encodeURIComponent(id)}/resolve`, {
+    const res = await fetch(`${API_BASE_URL}/api/coolingoff/${encodeURIComponent(id)}/resolve`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action }),
@@ -111,7 +110,7 @@ export async function resolveBackendItem(
  */
 export async function reevaluateItem(id: string): Promise<string | null> {
   try {
-    const res = await fetch(`${API_BASE}/api/coolingoff/${encodeURIComponent(id)}/reevaluate`, {
+    const res = await fetch(`${API_BASE_URL}/api/coolingoff/${encodeURIComponent(id)}/reevaluate`, {
       signal: AbortSignal.timeout(8000),
     })
     if (!res.ok) return null

@@ -1,3 +1,12 @@
+// AbortSignal.timeout polyfill for jsdom
+if (!AbortSignal.timeout) {
+  AbortSignal.timeout = (ms: number) => {
+    const ctrl = new AbortController()
+    setTimeout(() => ctrl.abort(new DOMException('TimeoutError')), ms)
+    return ctrl.signal
+  }
+}
+
 // Chrome API mock for Jest (jsdom doesn't have chrome globals)
 global.chrome = {
   storage: {
